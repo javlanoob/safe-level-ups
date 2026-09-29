@@ -7,6 +7,7 @@ import net.runelite.api.ScriptID;
 import net.runelite.api.Skill;
 import net.runelite.api.WidgetNode;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.widgets.JavaScriptCallback;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetModalMode;
@@ -68,7 +69,12 @@ class LevelUpInterface
 
 	private static final String CONTINUE_TEXT = "Click here to continue";
 
-	static int groupFor(Skill skill)
+	/**
+	 * A colour tag with no text after it to colour, so the game draws nothing for it.
+	 */
+	private static final String DRAWN_AS_NOTHING = "<col=ffffff>";
+
+	private static int groupFor(Skill skill)
 	{
 		return SKILL_GROUPS.getOrDefault(skill, -1);
 	}
@@ -107,6 +113,12 @@ class LevelUpInterface
 	private static final long NEVER_BUILT_MILLIS = 3000L;
 
 	private final Client client;
+
+	/**
+	 * The skill the box on screen is announcing, or null while there is no box.
+	 */
+	private Skill skill;
+
 	private String name;
 	private int group;
 	private int level;
@@ -137,10 +149,34 @@ class LevelUpInterface
 		return opening || node != null;
 	}
 
-	void open(String name, int group, int level)
+	/**
+	 * Whether the box on screen is the one this skill would get, so a further level in it can be
+	 * shown where it stands instead of waiting behind the level it follows.
+	 */
+	boolean isShowing(Skill skill)
 	{
-		this.name = name;
-		this.group = group;
+		return this.skill == skill && isOpen();
+	}
+
+	/**
+	 * Moves the box on screen on to a further level in the same skill. The minimum time starts again
+	 * from here, because the player is being handed a line they have not read yet.
+	 */
+	void showLevel(int level)
+	{
+		this.level = level;
+		openedAt = System.currentTimeMillis();
+		shownAt = 0;
+
+		populate();
+		rebuild = true;
+	}
+
+	void open(Skill skill, int level)
+	{
+		this.skill = skill;
+		this.name = skill.getName();
+		this.group = groupFor(skill);
 		this.level = level;
 		closeRequested = false;
 		openedAt = System.currentTimeMillis();
@@ -209,6 +245,7 @@ class LevelUpInterface
 	{
 		WidgetNode open = node;
 		node = null;
+		skill = null;
 		rebuild = false;
 		closeRequested = false;
 
@@ -251,7 +288,7 @@ class LevelUpInterface
 		hide(InterfaceID.Chatbox.MES_TEXT2);
 
 		Widget first = setText(InterfaceID.LevelupDisplay.TEXT1, line1(name));
-		setText(InterfaceID.LevelupDisplay.TEXT2, line2(name, level));
+		setText(InterfaceID.LevelupDisplay.TEXT2, line2(name, level) + screenshotGuard());
 
 		// The interface exists from this point, so this is the first moment the box could be drawn
 		if (first != null && shownAt == 0)
@@ -280,6 +317,23 @@ class LevelUpInterface
 			continueText.setHasListener(true);
 			continueText.revalidate();
 		}
+	}
+
+	/**
+	 * RuneLite screenshots a level up twice when the box comes from here. It takes one from the game's
+	 * own level up message in the chat, which is where the level arrives once the game's pop-ups are
+	 * turned off, and another from the level up interface being loaded, which is how this box is shown.
+	 * Both are the same level, and the second is named from the line this goes on the end of, so the
+	 * line is written with a tag that draws as nothing. It reads the same on screen and no longer reads
+	 * as a level up to anything matching the game's wording.
+	 * <p>
+	 * Only while the game announces levels in the chat, because that is the announcement the screenshot
+	 * was already taken from. With that turned off this box is the only announcement there is, and a
+	 * picture of it is the picture the player wanted.
+	 */
+	private String screenshotGuard()
+	{
+		return client.getVarbitValue(VarbitID.OPTION_LEVEL_UP_MESSAGE_DISABLED) == 1 ? DRAWN_AS_NOTHING : "";
 	}
 
 	/**

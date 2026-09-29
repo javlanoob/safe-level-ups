@@ -110,8 +110,35 @@ public class SafeLevelUpsPlugin extends Plugin implements KeyListener
 		int level = Experience.getLevelForXp(experience);
 		if (level > Experience.getLevelForXp(previous) && level <= MAX_ANNOUNCED_LEVEL)
 		{
-			pending.add(new LevelUp(skill.getName(), LevelUpInterface.groupFor(skill), level));
+			announce(skill, level);
 		}
+	}
+
+	/**
+	 * A second level in a skill whose box is already on screen, or already waiting its turn, is the
+	 * same news one level further on, so it takes the place of the level it follows rather than
+	 * queueing behind it. Levelling twice in one action, which a full inventory of potions does, then
+	 * reads as the level the player ended on instead of making them dismiss a level they are already
+	 * past. Another skill is news of its own, so it still waits for the box in front of it.
+	 */
+	private void announce(Skill skill, int level)
+	{
+		if (levelUpInterface.isShowing(skill))
+		{
+			levelUpInterface.showLevel(level);
+			return;
+		}
+
+		for (LevelUp queued : pending)
+		{
+			if (queued.skill == skill)
+			{
+				queued.level = level;
+				return;
+			}
+		}
+
+		pending.add(new LevelUp(skill, level));
 	}
 
 	@Subscribe
@@ -200,7 +227,7 @@ public class SafeLevelUpsPlugin extends Plugin implements KeyListener
 		}
 
 		LevelUp levelUp = pending.remove();
-		levelUpInterface.open(levelUp.name, levelUp.group, levelUp.level);
+		levelUpInterface.open(levelUp.skill, levelUp.level);
 	}
 
 	private void rememberExperience()
@@ -235,14 +262,17 @@ public class SafeLevelUpsPlugin extends Plugin implements KeyListener
 
 	private static class LevelUp
 	{
-		private final String name;
-		private final int group;
-		private final int level;
+		private final Skill skill;
 
-		private LevelUp(String name, int group, int level)
+		/**
+		 * Not final: a further level in the same skill overwrites the one waiting rather than adding
+		 * another box behind it.
+		 */
+		private int level;
+
+		private LevelUp(Skill skill, int level)
 		{
-			this.name = name;
-			this.group = group;
+			this.skill = skill;
 			this.level = level;
 		}
 	}
