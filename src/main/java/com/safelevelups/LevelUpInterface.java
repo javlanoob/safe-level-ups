@@ -172,7 +172,14 @@ class LevelUpInterface
 		rebuild = true;
 	}
 
-	void open(Skill skill, int level)
+	/**
+	 * Shows the box, or says that it could not be shown. The client keeps one copy of an interface,
+	 * so asking for this one while the game already has it open somewhere else is refused, which is
+	 * what happens when a level arrives with the game's own pop-ups still turned on. The message
+	 * layer is open by that point, and an empty message layer is a blank box sitting over the chat
+	 * with nothing in it to dismiss it, so a refusal puts the chatbox back before returning.
+	 */
+	boolean open(Skill skill, int level)
 	{
 		this.skill = skill;
 		this.name = skill.getName();
@@ -187,14 +194,57 @@ class LevelUpInterface
 		client.runScript(ScriptID.MESSAGE_LAYER_OPEN, 0);
 
 		// Opening fires a widget loaded event, so claim the interface as ours before it does
+		WidgetNode opened = null;
 		opening = true;
-		node = client.openInterface(InterfaceID.Chatbox.MES_LAYER, InterfaceID.LEVELUP_DISPLAY,
-			WidgetModalMode.MODAL_CLICKTHROUGH);
-		opening = false;
+		try
+		{
+			opened = client.openInterface(InterfaceID.Chatbox.MES_LAYER, InterfaceID.LEVELUP_DISPLAY,
+				WidgetModalMode.MODAL_CLICKTHROUGH);
+		}
+		catch (RuntimeException refused)
+		{
+			// Left to itself this would also leave the box counted as open, and a box counted as open
+			// is never opened again and never closed either
+		}
+		finally
+		{
+			opening = false;
+		}
+
+		node = opened;
+
+		if (opened == null)
+		{
+			skill = null;
+			restore();
+			return false;
+		}
 
 		// The interface may not be built yet, so fill it in again on the next tick
 		populate();
 		rebuild = true;
+		return true;
+	}
+
+	/**
+	 * The game closing the chatbox for something of its own, which takes this box down with it. The
+	 * interface has already gone by the time this runs, so it is let go of rather than closed again,
+	 * and what is left behind is handed back the same way closing by hand hands it back.
+	 */
+	void onMessageLayerClosed()
+	{
+		if (node == null)
+		{
+			return;
+		}
+
+		node = null;
+		skill = null;
+		rebuild = false;
+		closeRequested = false;
+
+		unhide(InterfaceID.Chatbox.MES_TEXT);
+		unhide(InterfaceID.Chatbox.MES_TEXT2);
 	}
 
 	void onGameTick()
@@ -245,6 +295,7 @@ class LevelUpInterface
 	{
 		WidgetNode open = node;
 		node = null;
+		opening = false;
 		skill = null;
 		rebuild = false;
 		closeRequested = false;
@@ -257,20 +308,32 @@ class LevelUpInterface
 		try
 		{
 			client.closeInterface(open, true);
-
-			// The two prompt lines were hidden so they could not draw over the box. They belong to
-			// the game, not to us, so they are handed back before the layer closes rather than left
-			// for the layer to restore. A prompt written into a component we had hidden and never
-			// gave back would be a prompt the player never sees
-			unhide(InterfaceID.Chatbox.MES_TEXT);
-			unhide(InterfaceID.Chatbox.MES_TEXT2);
-
-			client.runScript(ScriptID.MESSAGE_LAYER_CLOSE, 0, 1, 0);
 		}
 		catch (IllegalArgumentException alreadyGone)
 		{
 			// Logging out unlinks the interface before we get here, and closing it then is an error
 		}
+
+		// Whether or not there was still an interface there to close, the chatbox goes back to the
+		// state it was taken from. Leaving this to the successful case is what turns a box the game
+		// pulled out from under us into a blank one that stays on screen
+		restore();
+	}
+
+	/**
+	 * Puts the chatbox back the way it was found.
+	 * <p>
+	 * The two prompt lines were hidden so they could not draw over the box. They belong to the game,
+	 * not to us, so they are handed back before the layer closes rather than left for the layer to
+	 * restore. A prompt written into a component we had hidden and never gave back would be a prompt
+	 * the player never sees.
+	 */
+	private void restore()
+	{
+		unhide(InterfaceID.Chatbox.MES_TEXT);
+		unhide(InterfaceID.Chatbox.MES_TEXT2);
+
+		client.runScript(ScriptID.MESSAGE_LAYER_CLOSE, 0, 1, 0);
 	}
 
 	/**

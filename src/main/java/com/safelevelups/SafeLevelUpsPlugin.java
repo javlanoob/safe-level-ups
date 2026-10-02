@@ -8,11 +8,13 @@ import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.Experience;
 import net.runelite.api.GameState;
+import net.runelite.api.ScriptID;
 import net.runelite.api.Skill;
 import net.runelite.api.events.ClientTick;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.MenuOptionClicked;
+import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
@@ -151,6 +153,19 @@ public class SafeLevelUpsPlugin extends Plugin implements KeyListener
 		}
 	}
 
+	/**
+	 * The game closing the chatbox for something of its own, which takes the box with it. Noticing it
+	 * here is what keeps a box that has already gone from being counted as still on screen.
+	 */
+	@Subscribe
+	public void onScriptPreFired(ScriptPreFired event)
+	{
+		if (event.getScriptId() == ScriptID.MESSAGE_LAYER_CLOSE)
+		{
+			levelUpInterface.onMessageLayerClosed();
+		}
+	}
+
 	@Subscribe
 	public void onMenuOptionClicked(MenuOptionClicked event)
 	{
@@ -227,7 +242,13 @@ public class SafeLevelUpsPlugin extends Plugin implements KeyListener
 		}
 
 		LevelUp levelUp = pending.remove();
-		levelUpInterface.open(levelUp.skill, levelUp.level);
+
+		// A box the client would not show is a box the game is announcing itself, so the levels
+		// behind it are its news to give rather than a queue to work through once it is done
+		if (!levelUpInterface.open(levelUp.skill, levelUp.level))
+		{
+			pending.clear();
+		}
 	}
 
 	private void rememberExperience()
