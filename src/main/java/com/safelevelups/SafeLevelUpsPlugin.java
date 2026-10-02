@@ -190,11 +190,24 @@ public class SafeLevelUpsPlugin extends Plugin implements KeyListener
 	@Subscribe
 	public void onMenuOptionClicked(MenuOptionClicked event)
 	{
-		// Whatever the click was for, it goes through to the game. The box just gets out of the way
-		if (levelUpInterface.isOpen())
+		if (!levelUpInterface.isOpen())
 		{
-			levelUpInterface.requestClose();
+			return;
 		}
+
+		// A click on the box is about the box. Continue is handled where it is drawn, and the rest of
+		// it is not something to read as the player having moved on
+		if ((event.getParam1() >>> 16) == InterfaceID.LEVELUP_DISPLAY)
+		{
+			return;
+		}
+
+		// Whatever the click was for, it goes through to the game. The box just gets out of the way
+		levelUpInterface.requestClose();
+
+		// Walking off, or starting anything else, says the player is done being told about levels.
+		// A quest hands out enough of them at once to be standing in the way for a while otherwise
+		pending.clear();
 	}
 
 	@Override
@@ -212,7 +225,7 @@ public class SafeLevelUpsPlugin extends Plugin implements KeyListener
 			return;
 		}
 
-		levelUpInterface.requestClose();
+		levelUpInterface.requestCloseNow();
 		event.consume();
 	}
 

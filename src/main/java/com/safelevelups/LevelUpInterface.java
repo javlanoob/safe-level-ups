@@ -104,7 +104,7 @@ class LevelUpInterface
 	 * it is open, so a click they had already lined up for something else would otherwise dismiss it
 	 * before they read it. The click still counts, it just takes effect once this has passed.
 	 * <p>
-	 * Pressing the box's own Continue is not that kind of click and does not wait.
+	 * Continuing past the box on purpose, with Continue or with space, does not wait.
 	 */
 	private static final long MINIMUM_OPEN_MILLIS = 600L;
 
@@ -142,8 +142,9 @@ class LevelUpInterface
 	private volatile boolean closeRequested;
 
 	/**
-	 * Whether the close was asked for by the box's own Continue rather than by a click that happened
-	 * to land while it was up. The minimum is there for the second kind.
+	 * Whether the close was asked for by the player continuing past the box, with Continue or with
+	 * space, rather than by a click that happened to land while it was up. The minimum is there for
+	 * the second kind.
 	 */
 	private volatile boolean closeNow;
 
@@ -313,9 +314,9 @@ class LevelUpInterface
 	}
 
 	/**
-	 * The player pressing Continue on the box itself, which comes down at once. Anything waiting
-	 * behind it is up on the same frame, so a quest handing out a pile of levels is clicked through
-	 * at the speed of the clicking rather than a tick at a time.
+	 * The player continuing past the box, which comes down at once. Anything waiting behind it is up
+	 * on the same frame, so a quest handing out a pile of levels is gone through at the speed of the
+	 * clicking rather than a tick at a time.
 	 */
 	void requestCloseNow()
 	{
