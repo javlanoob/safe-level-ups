@@ -234,13 +234,23 @@ public class SafeLevelUpsPlugin extends Plugin implements KeyListener
 	public void onClientTick(ClientTick event)
 	{
 		levelUpInterface.onClientTick();
+
+		// On the same frame as the close above, so pressing Continue on one level puts the next one
+		// up straight away rather than leaving the chatbox empty until the tick comes round
+		showNext();
 	}
 
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
 		levelUpInterface.onGameTick();
+	}
 
+	/**
+	 * Puts the next level waiting on screen, if there is one and the chatbox is free to take it.
+	 */
+	private void showNext()
+	{
 		// Asking for the interface while the game has it would only be refused, and being refused
 		// costs the chatbox a flicker on the way back out
 		if (pending.isEmpty() || levelUpInterface.isOpen() || gameLevelUp)

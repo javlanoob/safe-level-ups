@@ -100,9 +100,11 @@ class LevelUpInterface
 	}
 
 	/**
-	 * How long the box stays up whatever the player does. Nothing stalls them while it is open, so a
-	 * click they had already lined up for something else would otherwise dismiss it before they read
-	 * it. The click still counts, it just takes effect once this has passed.
+	 * How long the box stays up for a click that was not aimed at it. Nothing stalls the player while
+	 * it is open, so a click they had already lined up for something else would otherwise dismiss it
+	 * before they read it. The click still counts, it just takes effect once this has passed.
+	 * <p>
+	 * Pressing the box's own Continue is not that kind of click and does not wait.
 	 */
 	private static final long MINIMUM_OPEN_MILLIS = 600L;
 
@@ -139,6 +141,12 @@ class LevelUpInterface
 	private volatile boolean opening;
 	private volatile boolean closeRequested;
 
+	/**
+	 * Whether the close was asked for by the box's own Continue rather than by a click that happened
+	 * to land while it was up. The minimum is there for the second kind.
+	 */
+	private volatile boolean closeNow;
+
 	LevelUpInterface(Client client)
 	{
 		this.client = client;
@@ -168,6 +176,10 @@ class LevelUpInterface
 		openedAt = System.currentTimeMillis();
 		shownAt = 0;
 
+		// A Continue pressed for the level this one replaces was pressed for a line the player has
+		// now not read, so it does not carry over and take the new one straight back off again
+		closeNow = false;
+
 		populate();
 		rebuild = true;
 	}
@@ -186,6 +198,7 @@ class LevelUpInterface
 		this.group = groupFor(skill);
 		this.level = level;
 		closeRequested = false;
+		closeNow = false;
 		openedAt = System.currentTimeMillis();
 		shownAt = 0;
 
@@ -242,6 +255,7 @@ class LevelUpInterface
 		skill = null;
 		rebuild = false;
 		closeRequested = false;
+		closeNow = false;
 
 		unhide(InterfaceID.Chatbox.MES_TEXT);
 		unhide(InterfaceID.Chatbox.MES_TEXT2);
@@ -264,6 +278,13 @@ class LevelUpInterface
 	{
 		if (!closeRequested)
 		{
+			return;
+		}
+
+		// Aimed at the box, so there is nothing to protect the player from
+		if (closeNow)
+		{
+			close();
 			return;
 		}
 
@@ -291,6 +312,17 @@ class LevelUpInterface
 		closeRequested = true;
 	}
 
+	/**
+	 * The player pressing Continue on the box itself, which comes down at once. Anything waiting
+	 * behind it is up on the same frame, so a quest handing out a pile of levels is clicked through
+	 * at the speed of the clicking rather than a tick at a time.
+	 */
+	void requestCloseNow()
+	{
+		closeNow = true;
+		closeRequested = true;
+	}
+
 	void close()
 	{
 		WidgetNode open = node;
@@ -299,6 +331,7 @@ class LevelUpInterface
 		skill = null;
 		rebuild = false;
 		closeRequested = false;
+		closeNow = false;
 
 		if (open == null)
 		{
@@ -376,7 +409,7 @@ class LevelUpInterface
 		if (continueText != null)
 		{
 			continueText.setAction(0, "Continue");
-			continueText.setOnOpListener((JavaScriptCallback) ev -> requestClose());
+			continueText.setOnOpListener((JavaScriptCallback) ev -> requestCloseNow());
 			continueText.setHasListener(true);
 			continueText.revalidate();
 		}
