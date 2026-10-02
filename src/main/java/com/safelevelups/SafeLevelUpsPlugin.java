@@ -16,6 +16,7 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.MenuOptionClicked;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.events.StatChanged;
+import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarClientID;
@@ -60,6 +61,12 @@ public class SafeLevelUpsPlugin extends Plugin implements KeyListener
 	private final int[] lastExperience = forgottenExperience();
 	private final Deque<LevelUp> pending = new ArrayDeque<>();
 	private LevelUpInterface levelUpInterface;
+
+	/**
+	 * Whether the game has its own level up box on screen. Both boxes are the same interface, and the
+	 * client holds one copy of an interface, so one of them being up is the other one being refused.
+	 */
+	private boolean gameLevelUp;
 
 	@Override
 	protected void startUp()
@@ -149,7 +156,21 @@ public class SafeLevelUpsPlugin extends Plugin implements KeyListener
 		// The game showed its own level up interface, so ours would only repeat it
 		if (event.getGroupId() == InterfaceID.LEVELUP_DISPLAY && !levelUpInterface.isOpen())
 		{
+			gameLevelUp = true;
 			pending.clear();
+		}
+	}
+
+	/**
+	 * The game's own box going away, which hands the interface back. Ours closing comes through here
+	 * too and is already false by then, so this is read as the interface being free either way.
+	 */
+	@Subscribe
+	public void onWidgetClosed(WidgetClosed event)
+	{
+		if (event.getGroupId() == InterfaceID.LEVELUP_DISPLAY)
+		{
+			gameLevelUp = false;
 		}
 	}
 
@@ -220,7 +241,9 @@ public class SafeLevelUpsPlugin extends Plugin implements KeyListener
 	{
 		levelUpInterface.onGameTick();
 
-		if (pending.isEmpty() || levelUpInterface.isOpen())
+		// Asking for the interface while the game has it would only be refused, and being refused
+		// costs the chatbox a flicker on the way back out
+		if (pending.isEmpty() || levelUpInterface.isOpen() || gameLevelUp)
 		{
 			return;
 		}
@@ -241,13 +264,14 @@ public class SafeLevelUpsPlugin extends Plugin implements KeyListener
 			return;
 		}
 
-		LevelUp levelUp = pending.remove();
-
-		// A box the client would not show is a box the game is announcing itself, so the levels
-		// behind it are its news to give rather than a queue to work through once it is done
-		if (!levelUpInterface.open(levelUp.skill, levelUp.level))
+		// Taken off the queue once it is actually on screen. A level the client would not show is a
+		// level the player has still not been told about, so it waits its turn again rather than
+		// being dropped on the floor, which on a quest handing out several at once would be most of
+		// them
+		LevelUp levelUp = pending.peek();
+		if (levelUpInterface.open(levelUp.skill, levelUp.level))
 		{
-			pending.clear();
+			pending.remove();
 		}
 	}
 
@@ -269,6 +293,7 @@ public class SafeLevelUpsPlugin extends Plugin implements KeyListener
 	{
 		Arrays.fill(lastExperience, UNKNOWN);
 		pending.clear();
+		gameLevelUp = false;
 	}
 
 	/**
